@@ -1,0 +1,54 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Bash(git add -A*)",
+      "Bash(git add --all*)",
+      "Bash(git add .)",
+      "Bash(git add . *)",
+      "Bash(git commit -a*)",
+      "Bash(git commit --all*)",
+      "Bash(git stash*)",
+      "PowerShell(git add -A*)",
+      "PowerShell(git add --all*)",
+      "PowerShell(git add .)",
+      "PowerShell(git add . *)",
+      "PowerShell(git commit -a*)",
+      "PowerShell(git stash*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash(git push *)",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/push_guard.py\"",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "if": "PowerShell(git push *)",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/push_guard.py\"",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "if": "Bash(gh pr create*)",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/push_guard.py\"",
+            "timeout": 60
+          },
+          {
+            "type": "command",
+            "if": "Bash(gh repo create*)",
+            "command": "python \"$CLAUDE_PROJECT_DIR/.claude/hooks/push_guard.py\"",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

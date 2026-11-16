@@ -10,7 +10,18 @@ MUTANTS = [
     # the account check never fires
     (HOOK, "if who != OWNER:", "if False:"),
     # any repo counts as the owner's
-    (HOOK, 'if not re.search(rf"github\\.com[/:]{re.escape(OWNER)}/", url):', "if False:"),
+    (HOOK, 'if (owner_of(url) or "").lower() != OWNER.lower():', "if False:"),
+    # only the first push address is checked
+    (HOOK, "for url in urls:", "for url in urls[:1]:"),
+    # a remote with no address is let through
+    (HOOK, "if not urls:", "if False:"),
+    # any host counts as GitHub
+    (HOOK, 'and host == "github.com" and', "and"),
+    # the owner's name must match capital for capital
+    (HOOK, '(owner_of(url) or "").lower() != OWNER.lower()', '(owner_of(url) or "") != OWNER'),
+    # a push that overrides its remote is not noticed
+    (HOOK, "if _overrides(command):", "if False:"),
+    (HOOK, 'if any(w == "--repo" or w.startswith("--repo=") for w in words[at + 1:]):', "if False:"),
     # an unreadable account lets the push through
     (HOOK, 'return f"cannot read the gh account ({exc}) - not pushing blind"', "return None"),
     # heredoc bodies are read as shell again

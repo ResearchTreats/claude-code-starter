@@ -120,3 +120,36 @@ def test_the_script_reads_a_tool_call_and_the_settings_wire_it_in(tmp_path):
     handlers = [h for g in settings["hooks"]["PreToolUse"] for h in g["hooks"]]
     assert {"Bash(git push *)", "PowerShell(git push *)"} <= {h.get("if") for h in handlers}
     assert all("push_guard.py" in h["command"] for h in handlers)
+
+
+def test_a_lookalike_address_is_not_the_owners_repo():
+    # The first version looked for "github.com/OWNER/" anywhere in the address.
+    for url in (f"https://evil.example/github.com/{OWNER}/x.git",
+                f"https://github.com.evil.example/{OWNER}/x.git",
+                f"https://evil.example/?next=github.com/{OWNER}/x",
+                f"git@evil.example:github.com/{OWNER}/x.git",
+                f"https://github.com/{OWNER}-other/x.git"):
+        reason, _ = _decide("git push", remotes={("C:/repo", "origin"): url})
+        assert reason and "is not a" in reason, url
+
+
+def test_every_push_address_of_the_remote_is_checked():
+    reason, _ = _decide("git push", remotes={("C:/repo", "origin"): MINE + "\n" + OTHER})
+    assert reason and "someone-else/their-repo" in reason
+    reason, _ = _decide("git push", remotes={("C:/repo", "origin"): ""})
+    assert reason and "no push address" in reason
+
+
+def test_the_owners_name_is_matched_whatever_its_capitals():
+    url = f"https://github.com/{OWNER.upper()}/x.git"
+    assert _decide("git push", remotes={("C:/repo", "origin"): url})[0] is None
+    assert _decide("git push", remotes={("C:/repo", "origin"): f"ssh://git@github.com/{OWNER}/x"})[0] is None
+
+
+def test_a_push_that_overrides_the_remote_is_blocked():
+    for cmd in (f"git -c remote.origin.pushurl={OTHER} push origin main",
+                f"git -c url.{OTHER}.insteadOf={MINE} push",
+                f"git push --repo={OTHER}",
+                f"git push --repo {OTHER} main"):
+        reason, _ = _decide(cmd, remotes={("C:/repo", "origin"): MINE})
+        assert reason and "overrides" in reason, cmd

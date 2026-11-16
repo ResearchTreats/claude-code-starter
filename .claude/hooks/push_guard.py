@@ -17,6 +17,7 @@ import shlex
 import subprocess
 import sys
 from typing import Callable, List, Optional, Tuple
+from urllib.parse import urlparse
 
 OWNER = "your-github-account"   # <- change this
 
@@ -94,6 +95,42 @@ def push_target(command: str, cwd: str) -> Optional[Tuple[str, str]]:
     return None
 
 
+def _overrides(command: str) -> bool:
+    """True when a push names its own address instead of a remote's: `git -c remote...`
+    or `-c url...insteadOf`, or `push --repo`. The check below reads the remote, so a
+    push that goes somewhere else is not checked - and not pushed."""
+    for words in segments(command):
+        at = _push_at(words)
+        if at is None:
+            continue
+        pre = words[:at]
+        for i, w in enumerate(pre):
+            value = pre[i + 1] if w == "-c" and i + 1 < len(pre) else w[2:] if w.startswith("-c") else ""
+            if value.lower().startswith(("remote.", "url.")):
+                return True
+        if any(w == "--repo" or w.startswith("--repo=") for w in words[at + 1:]):
+            return True
+    return False
+
+
+_SSH = re.compile(r"(?:ssh://)?git@github\.com[:/]([^/:]+)/[^/]+/?")
+
+
+def owner_of(url: str) -> Optional[str]:
+    """The GitHub account a push address belongs to, or None when it is not a github.com
+    repo address. The host and the first path part are compared exactly: "github.com/NAME/"
+    somewhere inside another site's address is not GitHub."""
+    m = _SSH.fullmatch(url)
+    if m:
+        return m.group(1)
+    u = urlparse(url)
+    parts = [x for x in u.path.split("/") if x]
+    host = (u.hostname or "").lower().rstrip(".")
+    if u.scheme in ("https", "http") and host == "github.com" and parts:
+        return parts[0]
+    return None
+
+
 def _gh_create(command: str) -> bool:
     return any(len(w) >= 3 and w[0] == "gh" and w[1] in ("pr", "repo") and w[2] == "create"
                for w in segments(command))
@@ -105,6 +142,9 @@ def decide(command: str, cwd: str, login: Callable[[], str],
     target = push_target(command, cwd)
     if target is None and not _gh_create(command):
         return None
+    if _overrides(command):
+        return ("the push overrides its remote's address (-c remote... / url..., or --repo): "
+                "that address is not checked, so it is not pushed")
     try:
         who = login().strip()
     except Exception as exc:
@@ -115,11 +155,14 @@ def decide(command: str, cwd: str, login: Callable[[], str],
     if target is not None:
         directory, name = target
         try:
-            url = remote_url(directory, name).strip()
+            urls = [u.strip() for u in remote_url(directory, name).splitlines() if u.strip()]
         except Exception as exc:
             return f"cannot read remote {name!r} ({exc}) - not pushing blind"
-        if not re.search(rf"github\.com[/:]{re.escape(OWNER)}/", url):
-            return f"{url} is not a {OWNER} repo - Claude does not push it"
+        if not urls:
+            return f"remote {name!r} has no push address - not pushing blind"
+        for url in urls:
+            if (owner_of(url) or "").lower() != OWNER.lower():
+                return f"{url} is not a {OWNER} repo - Claude does not push it"
     return None
 
 
@@ -129,7 +172,7 @@ def _login() -> str:
 
 
 def _remote(directory: str, name: str) -> str:
-    return subprocess.run(["git", "-C", directory, "remote", "get-url", name],
+    return subprocess.run(["git", "-C", directory, "remote", "get-url", "--push", "--all", name],
                           capture_output=True, text=True, timeout=15, check=True).stdout
 
 

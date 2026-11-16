@@ -128,6 +128,7 @@ def test_a_lookalike_address_is_not_the_owners_repo():
                 f"https://github.com.evil.example/{OWNER}/x.git",
                 f"https://evil.example/?next=github.com/{OWNER}/x",
                 f"git@evil.example:github.com/{OWNER}/x.git",
+                f"https://evil.example/git@github.com:{OWNER}/x.git",
                 f"https://github.com/{OWNER}-other/x.git"):
         reason, _ = _decide("git push", remotes={("C:/repo", "origin"): url})
         assert reason and "is not a" in reason, url

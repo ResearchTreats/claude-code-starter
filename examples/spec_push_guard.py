@@ -17,6 +17,8 @@ MUTANTS = [
     (HOOK, "if not urls:", "if False:"),
     # any host counts as GitHub
     (HOOK, 'and host == "github.com" and', "and"),
+    # an ssh-looking piece inside another address counts
+    (HOOK, "m = _SSH.fullmatch(url)", "m = _SSH.search(url)"),
     # the owner's name must match capital for capital
     (HOOK, '(owner_of(url) or "").lower() != OWNER.lower()', '(owner_of(url) or "") != OWNER'),
     # a push that overrides its remote is not noticed
